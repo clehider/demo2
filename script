@@ -1,0 +1,473 @@
+const SPREADSHEET_ID = '135CbBytPwuB2kV6PELMogccibSaVSqWqEvfwetsCBAg';
+const INVENTORY_SHEET_NAME = 'Inventario';
+const SALES_SHEET_NAME = 'Ventas';
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .setTitle('Sistema de Inventario y Ventas');
+}
+
+function getInventory() {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const inventory = data.map(row => {
+      let item = {};
+      headers.forEach((header, index) => {
+        item[header] = row[index];
+      });
+      return item;
+    });
+    console.log('Inventario obtenido:', inventory);
+    return inventory;
+  } catch (error) {
+    console.error('Error en getInventory: ' + error.message);
+    throw error;
+  }
+}
+
+// .gs
+
+function getSales() {
+  try {
+    console.log('Iniciando getSales()');
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    console.log('SpreadsheetID:', SPREADSHEET_ID);
+    
+    const sheet = ss.getSheetByName(SALES_SHEET_NAME);
+    if (!sheet) {
+      console.error('No se encontró la hoja de ventas:', SALES_SHEET_NAME);
+      return [];
+    }
+    console.log('Hoja de ventas encontrada:', SALES_SHEET_NAME);
+
+    const data = sheet.getDataRange().getValues();
+    console.log('Datos brutos de la hoja:', data);
+
+    if (data.length < 2) {
+      console.log('No hay datos de ventas (o solo encabezados)');
+      return [];
+    }
+
+    const headers = data.shift();
+    console.log('Encabezados:', headers);
+
+    const sales = data.map(row => {
+      let sale = {};
+      headers.forEach((header, index) => {
+        sale[header] = row[index];
+      });
+      // Asegúrate de que la fecha sea un objeto Date
+      if (sale.Fecha && !(sale.Fecha instanceof Date)) {
+        sale.Fecha = new Date(sale.Fecha);
+      }
+      return sale;
+    });
+
+    console.log('Ventas procesadas:', sales);
+    return sales;
+  } catch (error) {
+    console.error('Error en getSales:', error.message);
+    console.error('Stack trace:', error.stack);
+    throw new Error('Error al obtener ventas: ' + error.message);
+  }
+}
+
+function addSale(sale) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SALES_SHEET_NAME);
+    const lastRow = sheet.getLastRow();
+    const newId = lastRow;
+    const total = sale.Cantidad * sale.Precio;
+    const date = new Date();
+    sheet.appendRow([newId, sale.Producto, sale.Cantidad, sale.Precio, total, date]);
+    // Actualizar el inventario
+    updateInventoryAfterSale(sale.Producto, sale.Cantidad);
+    // Devolver la venta recién agregada
+    return {
+      ID: newId,
+      Producto: sale.Producto,
+      Cantidad: sale.Cantidad,
+      Precio: sale.Precio,
+      Total: total,
+      Fecha: date
+    };
+  } catch (error) {
+    console.error('Error en addSale: ' + error.message);
+    throw error;
+  }
+}
+
+
+function addItem(item) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const lastRow = sheet.getLastRow();
+    const newId = lastRow;
+    const barcode = generateBarcode(); // Asumiendo que tienes una función para generar códigos de barras
+    
+    // Asegúrate de que el orden coincida con las columnas de tu hoja de cálculo
+    sheet.appendRow([
+      newId, 
+      barcode,
+      item.Nombre,
+      item.Stock,
+      item.Valor
+    ]);
+    
+    console.log('Nuevo item agregado:', item);
+    return {
+      ID: newId,
+      Barcode: barcode,
+      Nombre: item.Nombre,
+      Stock: item.Stock,
+      Valor: item.Valor
+    };
+  } catch (error) {
+    console.error('Error en addItem: ' + error.message);
+    throw error;
+  }
+}
+
+function generateBarcode() {
+  // Implementa la lógica para generar un código de barras único
+  return 'BC-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+
+
+function getProductsInStock() {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const inventory = data.map(row => {
+      let item = {};
+      headers.forEach((header, index) => {
+        item[header] = row[index];
+      });
+      return item;
+    }).filter(item => item.Stock > 0); // Solo devuelve productos con stock positivo
+    
+    console.log('Productos en stock obtenidos:', inventory);
+    return inventory;
+  } catch (error) {
+    console.error('Error en getProductsInStock: ' + error.message);
+    throw error;
+  }
+}
+
+
+function updateInventoryAfterSale(productName, quantity) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const productNameIndex = headers.indexOf('Nombre');
+    const stockIndex = headers.indexOf('Stock');
+    
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][productNameIndex] === productName) {
+        const newStock = data[i][stockIndex] - quantity;
+        if (newStock < 0) {
+          throw new Error('Stock insuficiente para realizar la venta');
+        }
+        sheet.getRange(i + 2, stockIndex + 1).setValue(newStock);
+        console.log(`Inventario actualizado para ${productName}. Nuevo stock: ${newStock}`);
+        return;
+      }
+    }
+    // Si no se encuentra el producto, agregar un mensaje de error
+    throw new Error(`Producto no encontrado en el inventario: ${productName}`);
+  } catch (error) {
+    console.error('Error en updateInventoryAfterSale: ' + error.message);
+    throw error;
+  }
+}
+
+function addSale(sale) {
+  try {
+    // Validación de datos
+    if (!sale.Producto || typeof sale.Producto !== 'string') {
+      throw new Error('El nombre del producto es inválido.');
+    }
+    if (isNaN(sale.Cantidad) || sale.Cantidad <= 0) {
+      throw new Error('La cantidad debe ser un número positivo.');
+    }
+    if (isNaN(sale.Precio) || sale.Precio < 0) {
+      throw new Error('El precio debe ser un número no negativo.');
+    }
+
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SALES_SHEET_NAME);
+    const lastRow = sheet.getLastRow();
+    const newId = lastRow + 1; // Aseguramos que el ID es único
+    const total = sale.Cantidad * sale.Precio;
+    const date = new Date();
+
+    // Guardar la venta
+    sheet.appendRow([newId, sale.Producto, sale.Cantidad, sale.Precio, total, date]);
+
+    // Actualizar el inventario
+    updateInventoryAfterSale(sale.Producto, sale.Cantidad);
+
+    // Devolver la venta recién agregada
+    return {
+      ID: newId,
+      Producto: sale.Producto,
+      Cantidad: sale.Cantidad,
+      Precio: sale.Precio,
+      Total: total,
+      Fecha: date
+    };
+  } catch (error) {
+    console.error('Error en addSale: ' + error.message);
+    throw error;
+  }
+}
+
+
+function updateInventoryAfterSale(productName, quantity) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const range = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn());
+    const data = range.getValues();
+    const headers = data.shift();
+    const productNameIndex = headers.indexOf('Nombre');
+    const stockIndex = headers.indexOf('Stock');
+    
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][productNameIndex] === productName) {
+        const currentStock = data[i][stockIndex];
+        if (isNaN(currentStock) || currentStock < quantity) {
+          throw new Error('Stock insuficiente para realizar la venta');
+        }
+
+        const newStock = currentStock - quantity;
+        sheet.getRange(i + 2, stockIndex + 1).setValue(newStock);
+        console.log(`Inventario actualizado para ${productName}. Nuevo stock: ${newStock}`);
+        return;
+      }
+    }
+    throw new Error(`Producto no encontrado en el inventario: ${productName}`);
+  } catch (error) {
+    console.error('Error en updateInventoryAfterSale: ' + error.message);
+    throw error;
+  }
+}
+
+
+function generateBarcode() {
+  // Implementa la lógica para generar un código de barras único
+  // Por ejemplo, podrías usar un timestamp o un UUID
+  return 'BAR' + Date.now();
+}
+
+function getReports() {
+  try {
+    console.log('Iniciando getReports()');
+    
+    const inventorySheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const salesSheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SALES_SHEET_NAME);
+    
+    console.log('Hojas obtenidas correctamente');
+
+    const inventoryData = inventorySheet.getDataRange().getValues();
+    const salesData = salesSheet.getDataRange().getValues();
+    
+    console.log('Datos obtenidos. Filas en inventario: ' + inventoryData.length + ', Filas en ventas: ' + salesData.length);
+
+    // Verificar si hay datos además de los encabezados
+    if (inventoryData.length <= 1 && salesData.length <= 1) {
+      console.log('No hay datos suficientes en las hojas de cálculo');
+      return [
+        { Tipo: "Estado", Valor: "No hay datos suficientes en las hojas de cálculo" }
+      ];
+    }
+
+    // Ignorar las filas de encabezado
+    const inventoryHeaders = inventoryData.shift();
+    const salesHeaders = salesData.shift();
+    
+    console.log('Encabezados de inventario: ' + JSON.stringify(inventoryHeaders));
+    console.log('Encabezados de ventas: ' + JSON.stringify(salesHeaders));
+
+    // Calcular el valor total del inventario
+    const totalInventoryValue = inventoryData.reduce((total, row) => {
+      const stock = Number(row[inventoryHeaders.indexOf('Stock')]) || 0;
+      const valor = Number(row[inventoryHeaders.indexOf('Valor')]) || 0;
+      return total + (stock * valor);
+    }, 0);
+
+    console.log('Valor total del inventario calculado: ' + totalInventoryValue);
+
+    // Calcular el total de ventas
+    const totalSales = salesData.reduce((total, row) => {
+      const totalVenta = Number(row[salesHeaders.indexOf('Total')]) || 0;
+      return total + totalVenta;
+    }, 0);
+
+    console.log('Total de ventas calculado: ' + totalSales);
+
+    // Calcular el producto más vendido
+    const productSales = {};
+    salesData.forEach(row => {
+      const product = row[salesHeaders.indexOf('Producto')];
+      const quantity = Number(row[salesHeaders.indexOf('Cantidad')]) || 0;
+      productSales[product] = (productSales[product] || 0) + quantity;
+    });
+    const bestSellingProduct = Object.keys(productSales).length > 0 
+      ? Object.keys(productSales).reduce((a, b) => productSales[a] > productSales[b] ? a : b)
+      : "No hay ventas registradas";
+
+    console.log('Producto más vendido: ' + bestSellingProduct);
+
+    // Calcular el producto con menor stock
+    const lowestStockProduct = inventoryData.length > 0 
+      ? inventoryData.reduce((lowest, row) => {
+          const currentStock = Number(row[inventoryHeaders.indexOf('Stock')]) || 0;
+          return (!lowest || currentStock < lowest.stock) 
+            ? {name: row[inventoryHeaders.indexOf('Nombre')], stock: currentStock} 
+            : lowest;
+        }, null)
+      : null;
+
+    console.log('Producto con menor stock: ' + JSON.stringify(lowestStockProduct));
+
+    const reports = [
+      { Tipo: "Valor total del inventario", Valor: totalInventoryValue },
+      { Tipo: "Total de ventas", Valor: totalSales },
+      { Tipo: "Producto más vendido", Valor: bestSellingProduct },
+      { Tipo: "Producto con menor stock", Valor: lowestStockProduct ? `${lowestStockProduct.name} (Stock: ${lowestStockProduct.stock})` : "No hay productos en inventario" }
+    ];
+
+    console.log('Reportes generados: ' + JSON.stringify(reports));
+    return reports;
+  } catch (error) {
+    console.error('Error en getReports: ' + error.message);
+    console.error('Stack trace: ' + error.stack);
+    throw new Error('Error al generar reportes: ' + error.message);
+  }
+}
+
+// Constante para el nombre de la hoja de configuración
+const CONFIG_SHEET_NAME = 'Configuración';
+
+function getSettings() {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(CONFIG_SHEET_NAME);
+    if (!sheet) {
+      // Si la hoja no existe, la creamos con configuraciones por defecto
+      return createDefaultConfigSheet();
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    const settings = {};
+    for (let i = 1; i < data.length; i++) {
+      settings[data[i][0]] = data[i][1];
+    }
+    return settings;
+  } catch (error) {
+    console.error('Error en getSettings: ' + error.message);
+    throw new Error('Error al obtener la configuración: ' + error.message);
+  }
+}
+
+
+// ... (código previo) ...
+
+function updateItemStock(id, newStock) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const idIndex = headers.indexOf('ID');
+    const stockIndex = headers.indexOf('Stock');
+    
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][idIndex] == id) {
+        sheet.getRange(i + 2, stockIndex + 1).setValue(newStock);
+        console.log(`Stock actualizado para item ID ${id}. Nuevo stock: ${newStock}`);
+        return {success: true, message: 'Stock actualizado correctamente'};
+      }
+    }
+    
+    throw new Error(`Item con ID ${id} no encontrado`);
+  } catch (error) {
+    console.error('Error en updateItemStock: ' + error.message);
+    throw error;
+  }
+}
+
+function deleteItem(id) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(INVENTORY_SHEET_NAME);
+    const data = sheet.getDataRange().getValues();
+    const headers = data.shift();
+    const idIndex = headers.indexOf('ID');
+    
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][idIndex] == id) {
+        sheet.deleteRow(i + 2);
+        console.log(`Item con ID ${id} eliminado correctamente`);
+        return {success: true, message: 'Item eliminado correctamente'};
+      }
+    }
+    
+    throw new Error(`Item con ID ${id} no encontrado`);
+  } catch (error) {
+    console.error('Error en deleteItem: ' + error.message);
+    throw error;
+  }
+}
+
+// ... (resto del código) ...
+
+
+
+function updateSettings(newSettings) {
+  try {
+    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(CONFIG_SHEET_NAME);
+    if (!sheet) {
+      throw new Error('La hoja de configuración no existe');
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (newSettings.hasOwnProperty(data[i][0])) {
+        sheet.getRange(i + 1, 2).setValue(newSettings[data[i][0]]);
+      }
+    }
+    return getSettings();
+  } catch (error) {
+    console.error('Error en updateSettings: ' + error.message);
+    throw new Error('Error al actualizar la configuración: ' + error.message);
+  }
+}
+
+function createDefaultConfigSheet() {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.insertSheet(CONFIG_SHEET_NAME);
+    
+    const defaultSettings = [
+      ['Configuración', 'Valor'],
+      ['Moneda', 'USD'],
+      ['IVA', '0.19'],
+      ['Límite de stock bajo', '10'],
+      ['Correo de notificaciones', 'ejemplo@correo.com']
+    ];
+    
+    sheet.getRange(1, 1, defaultSettings.length, 2).setValues(defaultSettings);
+    
+    const settings = {};
+    for (let i = 1; i < defaultSettings.length; i++) {
+      settings[defaultSettings[i][0]] = defaultSettings[i][1];
+    }
+    return settings;
+  } catch (error) {
+    console.error('Error en createDefaultConfigSheet: ' + error.message);
+    throw new Error('Error al crear la hoja de configuración: ' + error.message);
+  }
+}
