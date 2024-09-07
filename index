@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <title>Sistema de Inventario y Ventas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+        }
+        .menu {
+            background-color: #444;
+            padding: 0.5rem;
+        }
+        .menu button {
+            background-color: #555;
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .menu button:hover {
+            background-color: #777;
+        }
+        .content {
+            padding: 2rem;
+            background-color: white;
+            margin: 1rem;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type=text], input[type=number], select {
+            width: 100%;
+            padding: 12px 20px;
+            margin: 8px 0;
+            display: inline-block;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        #debug {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .report-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .report-card {
+            background-color: #f0f0f0;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .report-card h3 {
+            margin-top: 0;
+            font-size: 1rem;
+            color: #333;
+        }
+        .report-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #settingsForm button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #settingsForm button:hover {
+            background-color: #45a049;
+        }
+        .edit-form {
+            display: none;
+            margin-top: 10px;
+        }
+        .edit-form input {
+            margin-right: 10px;
+        }
+    </style>
+    
+    <!-- Importar Firebase -->
+    <script type="module">
+        // Importar las funciones necesarias de los SDKs de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getDatabase, ref, get, set, push, remove } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        // Tu configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "fe9b2104b95ba07ea9ec291d46f1d03bd7c69414",
+            authDomain: "sistemainventarios-e6c15.firebaseapp.com",
+            databaseURL: "https://sistemainventarios-e6c1.firebaseio.com",
+            projectId: "sistemainventarios-e6c15",
+            storageBucket: "sistemainventarios-e6c1.appspot.com",
+            messagingSenderId: "103776136983656177454",
+            appId: "19785403811"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+
+        // Obtener una referencia a la base de datos
+        const database = getDatabase(app);
+
+        // Función para obtener el inventario
+        window.getInventory = function() {
+            const inventoryRef = ref(database, 'inventory');
+            return get(inventoryRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    return Object.entries(snapshot.val()).map(([id, data]) => ({
+                        ID: id,
+                        ...data
+                    }));
+                } else {
+                    return [];
+                }
+            });
+        }
+
+        // Función para agregar un item al inventario
+        window.addItem = function(item) {
+            const inventoryRef = ref(database, 'inventory');
+            return push(inventoryRef, item).then((newRef) => {
+                return { ...item, ID: newRef.key };
+            });
+        }
+
+        // Función para actualizar el stock de un item
+        window.updateItemStock = function(id, newStock) {
+            const itemRef = ref(database, `inventory/${id}/Stock`);
+            return set(itemRef, newStock);
+        }
+
+        // Función para eliminar un item
+        window.deleteItem = function(id) {
+            const itemRef = ref(database, `inventory/${id}`);
+            return remove(itemRef);
+        }
+
+        // Función para obtener ventas
+        window.getSales = function() {
+            const salesRef = ref(database, 'sales');
+            return get(salesRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    return Object.entries(snapshot.val()).map(([id, data]) => ({
+                        ID: id,
+                        ...data
+                    }));
+                } else {
+                    return [];
+                }
+            });
+        }
+
+        // Función para agregar una venta
+        window.addSale = function(sale) {
+            const salesRef = ref(database, 'sales');
+            return push(salesRef, sale).then((newRef) => {
+                return { ...sale, ID: newRef.key };
+            });
+        }
+
+        // Función para obtener productos en stock
+        window.getProductsInStock = function() {
+            return getInventory().then(inventory => 
+                inventory.filter(item => item.Stock > 0)
+            );
+        }
+
+        // Función para obtener reportes
+        window.getReports = function() {
+            return Promise.all([getInventory(), getSales()]).then(([inventory, sales]) => {
+                const totalInventoryValue = inventory.reduce((total, item) => total + (item.Stock * item.Valor), 0);
+                const totalSales = sales.reduce((total, sale) => total + (sale.Cantidad * sale.Precio), 0);
+                const productSales = sales.reduce((acc, sale) => {
+                    acc[sale.Producto] = (acc[sale.Producto] || 0) + sale.Cantidad;
+                    return acc;
+                }, {});
+                const bestSellingProduct = Object.keys(productSales).reduce((a, b) => productSales[a] > productSales[b] ? a : b, '');
+                const lowestStockProduct = inventory.reduce((lowest, item) => 
+                    (!lowest || item.Stock < lowest.Stock) ? item : lowest
+                , null);
+
+                return [
+                    { Tipo: "Valor total del inventario", Valor: totalInventoryValue.toFixed(2) },
+                    { Tipo: "Total de ventas", Valor: totalSales.toFixed(2) },
+                    { Tipo: "Producto más vendido", Valor: bestSellingProduct },
+                    { Tipo: "Producto con menor stock", Valor: lowestStockProduct ? `${lowestStockProduct.Nombre} (Stock: ${lowestStockProduct.Stock})` : "N/A" }
+                ];
+            });
+        }
+
+        // Función para obtener configuraciones
+        window.getSettings = function() {
+            const settingsRef = ref(database, 'settings');
+            return get(settingsRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    return snapshot.val();
+                } else {
+                    return {};
+                }
+            });
+        }
+
+        // Función para actualizar configuraciones
+        window.updateSettings = function(newSettings) {
+            const settingsRef = ref(database, 'settings');
+            return set(settingsRef, newSettings);
+        }
+    </script>
+</head>
+<body>
+    <div class="header">
+        <h1>Sistema de Inventario y Ventas</h1>
+    </div>
+
+    <div class="menu">
+        <button onclick="showInventory()">Inventario</button>
+        <button onclick="showSales()">Ventas</button>
+        <button onclick="showReports()">Reportes</button>
+        <button onclick="showSettings()">Configuración</button>
+    </div>
+
+    <div class="content" id="mainContent">
+        <!-- El contenido se cargará dinámicamente aquí -->
+    </div>
+
+    <div id="debug" style="display:none;"></div>
+
+    <script>
+        // Funciones para mostrar diferentes secciones
+        function showInventory() {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = `
+                <h2>Inventario</h2>
+                <div id="inventory">Cargando inventario...</div>
+                <h3>Agregar Nuevo Item</h3>
+                <form id="addItemForm">
+                    <input type="text" id="newNombre" placeholder="Nombre" required>
+                    <input type="number" id="newStock" placeholder="Stock" required>
+                    <input type="number" id="newValor" placeholder="Valor" step="0.01" required>
+                    <button type="submit">Agregar Item</button>
+                </form>
+            `;
+            loadInventory();
+            setupAddItemForm();
+        }
+
+        function showSales() {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = `
+                <h2>Ventas</h2>
+                <div id="salesList">Cargando ventas...</div>
+                <h3>Registrar Nueva Venta</h3>
+                <form id="addSaleForm">
+                    <select id="saleProducto" required></select>
+                    <input type="number" id="saleCantidad" placeholder="Cantidad" required>
+                    <input type="number" id="salePrecio" placeholder="Precio" step="0.01" required>
+                    <button type="submit">Registrar Venta</button>
+                </form>
+            `;
+            loadSales();
+            setupAddSaleForm();
+        }
+
+        function showReports() {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = `
+                <h2>Reportes</h2>
+                <div id="reports">Cargando reportes...</div>
+            `;
+            loadReports();
+        }
+
+        function showSettings() {
+            const mainContent = document.getElementById('mainContent');
+            mainContent.innerHTML = `
+                <h2>Configuración</h2>
+                <div id="settings">Cargando configuración...</div>
+            `;
+            loadSettings();
+        }
+
+        function loadInventory() {
+            addDebug('Iniciando carga de inventario...');
+            document.getElementById('inventory').innerHTML = 'Cargando inventario...';
+            getInventory()
+                .then(function(result) {
+                    addDebug('Éxito al cargar inventario: ' + JSON.stringify(result));
+                    displayInventory(result);
+                })
+                .catch(function(error) {
+                    addDebug('Error al cargar inventario: ' + error.message);
+                    handleError(error);
+                });
+        }
+
+        function displayInventory(inventory) {
+            let tableHtml = `
+                <table>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre</th>
+                        <th>Stock</th>
+                        <th>Valor</th>
+                        <th>Acciones</th>
+                    </tr>
+            `;
+            
+            inventory.forEach(item => {
+                tableHtml += `
+                    <tr>
+                        <td>${item.ID}</td>
+                        <td>${item.Nombre}</td>
+                        <td>${item.Stock}</td>
+                        <td>${item.Valor}</td>
+                        <td>
+                            <button onclick="editItem('${item.ID}')">Editar</button>
+                            <button onclick="deleteItemFromInventory('${item.ID}')">Eliminar</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += '</table>';
+            document.getElementById('inventory').innerHTML = tableHtml;
+        }
+
+        function setupAddItemForm() {
+            document.getElementById('addItemForm').onsubmit = function(e) {
+                e.preventDefault();
+                var newItem = {
+                    Nombre: document.getElementById('newNombre').value,
+                    Stock: parseInt(document.getElementById('newStock').value, 10),
+                    Valor: parseFloat(document.getElementById('newValor').value)
+                };
+                addDebug('Agregando nuevo item: ' + JSON.stringify(newItem));
+                addItem(newItem)
+                    .then(function(result) {
+                        addDebug('Item agregado: ' + JSON.stringify(result));
+                        loadInventory(); 
+document.getElementById('addItemForm').reset();
+    })
+    .catch(function(error) {
+        addDebug('Error al agregar item: ' + error.message);
+        handleError(error);
+    });
+};
+}
+
+function editItem(id) {
+// Implementar la lógica de edición aquí
+console.log('Editar item:', id);
+}
+
+function deleteItemFromInventory(id) {
+if (confirm('¿Estás seguro de que quieres eliminar este item?')) {
+    deleteItem(id)
+        .then(() => {
+            addDebug('Item eliminado con éxito');
+            loadInventory();
+        })
+        .catch(error => {
+            addDebug('Error al eliminar item: ' + error.message);
+            handleError(error);
+        });
+}
+}
+
+function loadSales() {
+addDebug('Iniciando carga de ventas...');
+document.getElementById('salesList').innerHTML = 'Cargando ventas...';
+getSales()
+    .then(function(result) {
+        addDebug('Respuesta de getSales(): ' + JSON.stringify(result));
+        if (result === null || result === undefined) {
+            addDebug('No se recibieron datos de ventas');
+            document.getElementById('salesList').innerHTML = 'No se pudieron cargar las ventas. Por favor, verifica la conexión e inténtalo de nuevo.';
+        } else if (Array.isArray(result) && result.length === 0) {
+            addDebug('Se recibió un array vacío de ventas');
+            document.getElementById('salesList').innerHTML = 'No hay ventas para mostrar.';
+        } else {
+            addDebug('Mostrando ventas...');
+            displaySales(result);
+        }
+    })
+    .catch(function(error) {
+        addDebug('Error al cargar ventas: ' + error.message);
+        document.getElementById('salesList').innerHTML = 'Error al cargar ventas: ' + error.message;
+    });
+}
+
+function displaySales(sales) {
+let tableHtml = `
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio</th>
+            <th>Total</th>
+            <th>Fecha</th>
+        </tr>
+`;
+
+sales.forEach(sale => {
+    tableHtml += `
+        <tr>
+            <td>${sale.ID}</td>
+            <td>${sale.Producto}</td>
+            <td>${sale.Cantidad}</td>
+            <td>${sale.Precio}</td>
+            <td>${(sale.Cantidad * sale.Precio).toFixed(2)}</td>
+            <td>${new Date(sale.Fecha).toLocaleString()}</td>
+        </tr>
+    `;
+});
+
+tableHtml += '</table>';
+document.getElementById('salesList').innerHTML = tableHtml;
+}
+
+function setupAddSaleForm() {
+getProductsInStock().then(products => {
+    const select = document.getElementById('saleProducto');
+    select.innerHTML = '';
+    products.forEach(product => {
+        const option = document.createElement('option');
+        option.value = product.Nombre;
+        option.textContent = `${product.Nombre} (Stock: ${product.Stock})`;
+        select.appendChild(option);
+    });
+});
+
+document.getElementById('addSaleForm').onsubmit = function(e) {
+    e.preventDefault();
+    var newSale = {
+        Producto: document.getElementById('saleProducto').value,
+        Cantidad: parseInt(document.getElementById('saleCantidad').value, 10),
+        Precio: parseFloat(document.getElementById('salePrecio').value),
+        Fecha: new Date().toISOString()
+    };
+    addDebug('Agregando nueva venta: ' + JSON.stringify(newSale));
+    addSale(newSale)
+        .then(function(result) {
+            addDebug('Venta agregada: ' + JSON.stringify(result));
+            loadSales();
+            document.getElementById('addSaleForm').reset();
+        })
+        .catch(function(error) {
+            addDebug('Error al agregar venta: ' + error.message);
+            handleError(error);
+        });
+};
+}
+
+function loadReports() {
+addDebug('Iniciando carga de reportes...');
+document.getElementById('reports').innerHTML = 'Cargando reportes...';
+getReports()
+    .then(function(result) {
+        addDebug('Éxito al cargar reportes: ' + JSON.stringify(result));
+        displayReports(result);
+    })
+    .catch(function(error) {
+        addDebug('Error al cargar reportes: ' + error.message);
+        document.getElementById('reports').innerHTML = 'Error al cargar reportes: ' + error.message;
+    });
+}
+
+function displayReports(reports) {
+let reportsHtml = '<div class="report-grid">';
+reports.forEach(report => {
+    reportsHtml += `
+        <div class="report-card">
+            <h3>${report.Tipo}</h3>
+            <p class="report-value">${report.Valor}</p>
+        </div>
+    `;
+});
+reportsHtml += '</div>';
+document.getElementById('reports').innerHTML = reportsHtml;
+}
+
+function loadSettings() {
+addDebug('Iniciando carga de configuración...');
+document.getElementById('settings').innerHTML = 'Cargando configuración...';
+getSettings()
+    .then(function(result) {
+        addDebug('Éxito al cargar configuración: ' + JSON.stringify(result));
+        displaySettings(result);
+    })
+    .catch(function(error) {
+        addDebug('Error al cargar configuración: ' + error.message);
+        document.getElementById('settings').innerHTML = 'Error al cargar configuración: ' + error.message;
+    });
+}
+
+function displaySettings(settings) {
+let settingsHtml = `
+    <form id="settingsForm">
+        <div class="form-group">
+            <label for="settingMoneda">Moneda:</label>
+            <input type="text" id="settingMoneda" value="${settings.Moneda || ''}" required>
+        </div>
+        <div class="form-group">
+            <label for="settingIVA">IVA (%):</label>
+            <input type="number" id="settingIVA" value="${settings.IVA || ''}" step="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="settingLimiteStock">Límite de stock bajo:</label>
+            <input type="number" id="settingLimiteStock" value="${settings.LimiteStockBajo || ''}" required>
+        </div>
+        <div class="form-group">
+            <label for="settingCorreo">Correo de notificaciones:</label>
+            <input type="email" id="settingCorreo" value="${settings.CorreoNotificaciones || ''}" required>
+        </div>
+        <button type="submit">Guardar Configuración</button>
+    </form>
+`;
+document.getElementById('settings').innerHTML = settingsHtml;
+setupSettingsForm();
+}
+
+function setupSettingsForm() {
+document.getElementById('settingsForm').onsubmit = function(e) {
+    e.preventDefault();
+    var newSettings = {
+        Moneda: document.getElementById('settingMoneda').value,
+        IVA: parseFloat(document.getElementById('settingIVA').value),
+        LimiteStockBajo: parseInt(document.getElementById('settingLimiteStock').value, 10),
+        CorreoNotificaciones: document.getElementById('settingCorreo').value
+    };
+    addDebug('Actualizando configuración: ' + JSON.stringify(newSettings));
+    updateSettings(newSettings)
+        .then(function() {
+            addDebug('Configuración actualizada con éxito');
+            alert('Configuración guardada con éxito');
+        })
+        .catch(function(error) {
+            addDebug('Error al actualizar configuración: ' + error.message);
+            handleError(error);
+        });
+};
+}
+
+function addDebug(message) {
+console.log(message);
+var debugElement = document.getElementById('debug');
+if (debugElement) {
+    debugElement.innerHTML += '<p>' + message + '</p>';
+}
+}
+
+function handleError(error) {
+console.error(error);
+alert('Error: ' + error.message);
+}
+
+// Inicializar la página mostrando el inventario
+window.onload = function() {
+showInventory();
+};
+</script>
+</body>
+</html>
